@@ -1,0 +1,160 @@
+import boto3
+import pandas as pd
+import argparse
+import logging
+from botocore.exceptions import ClientError
+
+# ------------------ Logging Setup ------------------ #
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+logger = logging.getLogger()
+
+# ------------------ S3 Client ------------------ #
+s3 = boto3.client("s3")
+
+
+# ------------------ Core Function ------------------ #
+def get_s3_metadata(bucket_name, include_acl=False, include_lock=False):
+    metadata_list = []
+
+    paginator = s3.get_paginator("list_objects_v2")
+
+    try:
+        pages = paginator.paginate(Bucket=bucket_name)
+
+        for page in pages:
+            if "Contents" not in page:
+                continue
+
+            for obj in page["Contents"]:
+                key = obj["Key"]
+                logger.info(f"Processing: {key}")
+
+                try:
+                    object_data = {
+                        "Bucket": bucket_name,
+                        "Key": key,
+                        "Size": obj["Size"],
+                        "LastModified": obj["LastModified"].replace(tzinfo=None),
+                        "StorageClass": obj.get("StorageClass", "STANDARD"),
+                        "ETag": obj.get("ETag")
+                    }
+
+                    # -------- HEAD OBJECT -------- #
+                    head = s3.head_object(Bucket=bucket_name, Key=key)
+
+                    object_data.update({
+                        "Encryption": head.get("ServerSideEncryption", "None"),
+                        "ReplicationStatus": head.get("ReplicationStatus", "None"),
+                        "BucketKeyEnabled": head.get("BucketKeyEnabled", False),
+                        "ChecksumAlgorithm": head.get("ChecksumAlgorithm", "None")
+                    })
+
+                    # -------- OPTIONAL: ACL -------- #
+                    if include_acl:
+                        try:
+                            acl = s3.get_object_acl(Bucket=bucket_name, Key=key)
+                            object_data["Owner"] = acl["Owner"].get("DisplayName")
+                            object_data["ACL_Count"] = len(acl.get("Grants", []))
+                        except ClientError as e:
+                            logger.warning(f"ACL error for {key}: {e}")
+
+                    # -------- OPTIONAL: OBJECT LOCK -------- #
+                    if include_lock:
+                        try:
+                            retention = s3.get_object_retention(Bucket=bucket_name, Key=key)
+                            object_data["RetentionMode"] = retention["Retention"]["Mode"]
+                            object_data["RetainUntil"] = retention["Retention"]["RetainUntilDate"]
+                        except ClientError:
+                            object_data["RetentionMode"] = None
+                            object_data["RetainUntil"] = None
+
+                        try:
+                            legal_hold = s3.get_object_legal_hold(Bucket=bucket_name, Key=key)
+                            object_data["LegalHold"] = legal_hold["LegalHold"]["Status"]
+                        except ClientError:
+                            object_data["LegalHold"] = None
+
+                    metadata_list.append(object_data)
+
+                except ClientError as e:
+                    logger.error(f"Error processing {key}: {e}")
+                    continue
+
+    except ClientError as e:
+        logger.error(f"Error accessing bucket {bucket_name}: {e}")
+
+    return metadata_list
+
+
+# ------------------ Main ------------------ #
+def main():
+    parser = argparse.ArgumentParser(description="S3 Metadata Extraction Tool")
+
+    parser.add_argument(
+        "--buckets",
+        nargs="+",
+        required=True,
+        help="List of S3 bucket names"
+    )
+
+    parser.add_argument(
+        "--output",
+        default="s3_metadata.xlsx",
+        help="Output file name (.xlsx or .csv)"
+    )
+
+    parser.add_argument(
+        "--include-acl",
+        action="store_true",
+        help="Include ACL details (slower)"
+    )
+
+    parser.add_argument(
+        "--include-lock",
+        action="store_true",
+        help="Include Object Lock details (slower)"
+    )
+
+    args = parser.parse_args()
+
+    all_metadata = []
+
+    for bucket in args.buckets:
+        logger.info(f"Fetching metadata for bucket: {bucket}")
+        data = get_s3_metadata(
+            bucket,
+            include_acl=args.include_acl,
+            include_lock=args.include_lock
+        )
+        all_metadata.extend(data)
+
+    if not all_metadata:
+        logger.warning("No data found.")
+        return
+
+    df = pd.DataFrame(all_metadata)
+
+    # Clean datetime column
+    if "LastModified" in df.columns:
+        df["LastModified"] = pd.to_datetime(df["LastModified"]).dt.tz_localize(None)
+
+    # -------- Output Handling -------- #
+    if args.output.endswith(".csv"):
+        df.to_csv(args.output, index=False)
+    elif args.output.endswith(".xlsx"):
+        df.to_excel(args.output, index=False)
+    else:
+        logger.warning("Unsupported format. Defaulting to Excel.")
+        output_file = args.output + ".xlsx"
+        df.to_excel(output_file, index=False)
+        args.output = output_file
+
+    logger.info(f"Metadata exported to {args.output}")
+
+
+if __name__ == "__main__":
+    main()

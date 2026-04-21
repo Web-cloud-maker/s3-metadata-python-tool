@@ -1,12 +1,12 @@
-# 📦 AWS S3 Metadata Extraction Tool
+#  AWS S3 Metadata Extraction Tool
 
-## 📌 Overview
+##  Overview
 Python-based tool to retrieve detailed AWS S3 object metadata as a cost-effective alternative to S3 Inventory.  
 Developed during HMSA migration to efficiently analyze and track large-scale S3 data.
 
 ---
 
-## 🚀 Features
+##  Features
 - Extracts S3 object metadata (size, last modified, storage class, ETag)
 - Retrieves security details (encryption, replication status, bucket key)
 - Optional extraction of:
@@ -18,14 +18,14 @@ Developed during HMSA migration to efficiently analyze and track large-scale S3 
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 - Python  
 - boto3 (AWS SDK)  
 - pandas  
 
 ---
 
-## ⚙️ Prerequisites
+##  Prerequisites
 - Python 3.x  
 - AWS CLI configured (`aws configure`)  
 
@@ -38,7 +38,7 @@ Developed during HMSA migration to efficiently analyze and track large-scale S3 
 
 ---
 
-## ▶️ Installation
+## Installation
 
 pip install boto3 pandas
 
@@ -53,7 +53,7 @@ The script generates a file containing:
 - ACL (optional)  
 - Object Lock details (optional)
 
-## 💡 Use Case
+##  Use Case
 This tool was designed and implemented during a cloud migration to:
 
 - Efficiently list and analyze S3 objects  
@@ -62,19 +62,19 @@ This tool was designed and implemented during a cloud migration to:
 
 ---
 
-## ⚠️ Notes
+##  Notes
 - Enabling `--include-acl` and `--include-lock` may increase execution time  
 - Suitable for large-scale buckets using pagination  
 
 ---
 
-## 🔗 Future Enhancements
+##  Future Enhancements
 - Multi-threading for faster processing  
 - Config file support (YAML/JSON)  
 - Docker containerization  
 - CLI packaging
 
 ---
-##👩‍💻 Author
+## Author
 
-Mounika Puppala
+**Mounika Puppala**
